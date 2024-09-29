@@ -1,10 +1,22 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:page_transition/page_transition.dart';
 import 'package:provider/provider.dart';
 
+import '/backend/schema/enums/enums.dart';
+import '/backend/supabase/supabase.dart';
+
+import '/auth/base_auth_user_provider.dart';
+
 import '/index.dart';
+import '/main.dart';
+import '/flutter_flow/flutter_flow_theme.dart';
+import '/flutter_flow/lat_lng.dart';
+import '/flutter_flow/place.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import 'serialization_util.dart';
 
 export 'package:go_router/go_router.dart';
 export 'serialization_util.dart';
@@ -17,7 +29,46 @@ class AppStateNotifier extends ChangeNotifier {
   static AppStateNotifier? _instance;
   static AppStateNotifier get instance => _instance ??= AppStateNotifier._();
 
+  BaseAuthUser? initialUser;
+  BaseAuthUser? user;
   bool showSplashImage = true;
+  String? _redirectLocation;
+
+  /// Determines whether the app will refresh and build again when a sign
+  /// in or sign out happens. This is useful when the app is launched or
+  /// on an unexpected logout. However, this must be turned off when we
+  /// intend to sign in/out and then navigate or perform any actions after.
+  /// Otherwise, this will trigger a refresh and interrupt the action(s).
+  bool notifyOnAuthChange = true;
+
+  bool get loading => user == null || showSplashImage;
+  bool get loggedIn => user?.loggedIn ?? false;
+  bool get initiallyLoggedIn => initialUser?.loggedIn ?? false;
+  bool get shouldRedirect => loggedIn && _redirectLocation != null;
+
+  String getRedirectLocation() => _redirectLocation!;
+  bool hasRedirect() => _redirectLocation != null;
+  void setRedirectLocationIfUnset(String loc) => _redirectLocation ??= loc;
+  void clearRedirectLocation() => _redirectLocation = null;
+
+  /// Mark as not needing to notify on a sign in / out when we intend
+  /// to perform subsequent actions (such as navigation) afterwards.
+  void updateNotifyOnAuthChange(bool notify) => notifyOnAuthChange = notify;
+
+  void update(BaseAuthUser newUser) {
+    final shouldUpdate =
+        user?.uid == null || newUser.uid == null || user?.uid != newUser.uid;
+    initialUser ??= newUser;
+    user = newUser;
+    // Refresh the app on auth change unless explicitly marked otherwise.
+    // No need to update unless the user has changed.
+    if (notifyOnAuthChange && shouldUpdate) {
+      notifyListeners();
+    }
+    // Once again mark the notifier as needing to update on auth change
+    // (in order to catch sign in / out events).
+    updateNotifyOnAuthChange(true);
+  }
 
   void stopShowingSplashImage() {
     showSplashImage = false;
@@ -29,17 +80,121 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
       initialLocation: '/',
       debugLogDiagnostics: true,
       refreshListenable: appStateNotifier,
-      errorBuilder: (context, state) => const HomePageWidget(),
+      errorBuilder: (context, state) =>
+          appStateNotifier.loggedIn ? NavBarPage() : LoginPageWidget(),
       routes: [
         FFRoute(
           name: '_initialize',
           path: '/',
-          builder: (context, _) => const HomePageWidget(),
+          builder: (context, _) =>
+              appStateNotifier.loggedIn ? NavBarPage() : LoginPageWidget(),
         ),
         FFRoute(
           name: 'HomePage',
-          path: '/homePage',
-          builder: (context, params) => const HomePageWidget(),
+          path: '/HomePage',
+          requireAuth: true,
+          builder: (context, params) => params.isEmpty
+              ? NavBarPage(initialPage: 'HomePage')
+              : HomePageWidget(),
+        ),
+        FFRoute(
+          name: 'LoginPage',
+          path: '/loginPage',
+          builder: (context, params) => LoginPageWidget(),
+        ),
+        FFRoute(
+          name: 'ChinalinkerAgendaCliente',
+          path: '/chinalinkerAgendaCliente',
+          builder: (context, params) => NavBarPage(
+            initialPage: '',
+            page: ChinalinkerAgendaClienteWidget(
+              idChinalinker: params.getParam(
+                'idChinalinker',
+                ParamType.int,
+              ),
+            ),
+          ),
+        ),
+        FFRoute(
+          name: 'InformationPage',
+          path: '/informationPage',
+          builder: (context, params) => params.isEmpty
+              ? NavBarPage(initialPage: 'InformationPage')
+              : InformationPageWidget(),
+        ),
+        FFRoute(
+          name: 'ProfilePage',
+          path: '/profilePage',
+          builder: (context, params) => params.isEmpty
+              ? NavBarPage(initialPage: 'ProfilePage')
+              : ProfilePageWidget(
+                  userID: params.getParam(
+                    'userID',
+                    ParamType.bool,
+                  ),
+                ),
+        ),
+        FFRoute(
+          name: 'SplashArt',
+          path: '/splashArt',
+          builder: (context, params) => SplashArtWidget(),
+        ),
+        FFRoute(
+          name: 'welcome',
+          path: '/welcome',
+          builder: (context, params) => WelcomeWidget(),
+        ),
+        FFRoute(
+          name: 'EsqueciSenha',
+          path: '/esqueciSenha',
+          builder: (context, params) => EsqueciSenhaWidget(),
+        ),
+        FFRoute(
+          name: 'AlterarSenhaPage',
+          path: '/alterarSenhaPage',
+          builder: (context, params) => AlterarSenhaPageWidget(),
+        ),
+        FFRoute(
+          name: 'CadastrarSupplier',
+          path: '/cadastrarSupplier',
+          builder: (context, params) => CadastrarSupplierWidget(),
+        ),
+        FFRoute(
+          name: 'ConsultarSupplier',
+          path: '/consultarSupplier',
+          builder: (context, params) => ConsultarSupplierWidget(),
+        ),
+        FFRoute(
+          name: 'InformationPageCliente',
+          path: '/informationPageCliente',
+          builder: (context, params) => InformationPageClienteWidget(),
+        ),
+        FFRoute(
+          name: 'AgendaVisitedClient',
+          path: '/agendaVisitedClient',
+          builder: (context, params) => params.isEmpty
+              ? NavBarPage(initialPage: 'AgendaVisitedClient')
+              : AgendaVisitedClientWidget(),
+        ),
+        FFRoute(
+          name: 'InfoProfilePage',
+          path: '/infoProfilePage',
+          builder: (context, params) => InfoProfilePageWidget(),
+        ),
+        FFRoute(
+          name: 'CreateAccountCustomerPage',
+          path: '/createAccountCustomerPage',
+          builder: (context, params) => CreateAccountCustomerPageWidget(),
+        ),
+        FFRoute(
+          name: 'FAQpage',
+          path: '/fAQpage',
+          builder: (context, params) => FAQpageWidget(),
+        ),
+        FFRoute(
+          name: 'ChinaTotal',
+          path: '/chinaTotal',
+          builder: (context, params) => ChinaTotalWidget(),
         )
       ].map((r) => r.toRoute(appStateNotifier)).toList(),
     );
@@ -53,6 +208,40 @@ extension NavParamExtensions on Map<String, String?> {
 }
 
 extension NavigationExtensions on BuildContext {
+  void goNamedAuth(
+    String name,
+    bool mounted, {
+    Map<String, String> pathParameters = const <String, String>{},
+    Map<String, String> queryParameters = const <String, String>{},
+    Object? extra,
+    bool ignoreRedirect = false,
+  }) =>
+      !mounted || GoRouter.of(this).shouldRedirect(ignoreRedirect)
+          ? null
+          : goNamed(
+              name,
+              pathParameters: pathParameters,
+              queryParameters: queryParameters,
+              extra: extra,
+            );
+
+  void pushNamedAuth(
+    String name,
+    bool mounted, {
+    Map<String, String> pathParameters = const <String, String>{},
+    Map<String, String> queryParameters = const <String, String>{},
+    Object? extra,
+    bool ignoreRedirect = false,
+  }) =>
+      !mounted || GoRouter.of(this).shouldRedirect(ignoreRedirect)
+          ? null
+          : pushNamed(
+              name,
+              pathParameters: pathParameters,
+              queryParameters: queryParameters,
+              extra: extra,
+            );
+
   void safePop() {
     // If there is only one route on the stack, navigate to the initial
     // page instead of popping.
@@ -62,6 +251,19 @@ extension NavigationExtensions on BuildContext {
       go('/');
     }
   }
+}
+
+extension GoRouterExtensions on GoRouter {
+  AppStateNotifier get appState => AppStateNotifier.instance;
+  void prepareAuthEvent([bool ignoreRedirect = false]) =>
+      appState.hasRedirect() && !ignoreRedirect
+          ? null
+          : appState.updateNotifyOnAuthChange(false);
+  bool shouldRedirect(bool ignoreRedirect) =>
+      !ignoreRedirect && appState.hasRedirect();
+  void clearRedirectLocation() => appState.clearRedirectLocation();
+  void setRedirectLocationIfUnset(String location) =>
+      appState.updateNotifyOnAuthChange(false);
 }
 
 extension _GoRouterStateExtensions on GoRouterState {
@@ -152,6 +354,19 @@ class FFRoute {
   GoRoute toRoute(AppStateNotifier appStateNotifier) => GoRoute(
         name: name,
         path: path,
+        redirect: (context, state) {
+          if (appStateNotifier.shouldRedirect) {
+            final redirectLocation = appStateNotifier.getRedirectLocation();
+            appStateNotifier.clearRedirectLocation();
+            return redirectLocation;
+          }
+
+          if (requireAuth && !appStateNotifier.loggedIn) {
+            appStateNotifier.setRedirectLocationIfUnset(state.uri.toString());
+            return '/loginPage';
+          }
+          return null;
+        },
         pageBuilder: (context, state) {
           fixStatusBarOniOS16AndBelow(context);
           final ffParams = FFParameters(state, asyncParams);
@@ -161,7 +376,19 @@ class FFRoute {
                   builder: (context, _) => builder(context, ffParams),
                 )
               : builder(context, ffParams);
-          final child = page;
+          final child = appStateNotifier.loading
+              ? Center(
+                  child: SizedBox(
+                    width: 50.0,
+                    height: 50.0,
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        FlutterFlowTheme.of(context).primary,
+                      ),
+                    ),
+                  ),
+                )
+              : page;
 
           final transitionInfo = state.transitionInfo;
           return transitionInfo.hasTransition
@@ -203,7 +430,7 @@ class TransitionInfo {
   final Duration duration;
   final Alignment? alignment;
 
-  static TransitionInfo appDefault() => const TransitionInfo(hasTransition: false);
+  static TransitionInfo appDefault() => TransitionInfo(hasTransition: false);
 }
 
 class RootPageContext {

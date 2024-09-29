@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:from_css_color/from_css_color.dart';
 
+import '/backend/schema/enums/enums.dart';
+import '/backend/supabase/supabase.dart';
+
 import '../../flutter_flow/lat_lng.dart';
 import '../../flutter_flow/place.dart';
 import '../../flutter_flow/uploaded_file.dart';
@@ -69,6 +72,12 @@ String? serializeParam(
         data = uploadedFileToString(param as FFUploadedFile);
       case ParamType.JSON:
         data = json.encode(param);
+
+      case ParamType.Enum:
+        data = (param is Enum) ? param.serialize() : null;
+
+      case ParamType.SupabaseRow:
+        return json.encode((param as SupabaseDataRow).data);
 
       default:
         data = null;
@@ -145,6 +154,9 @@ enum ParamType {
   FFPlace,
   FFUploadedFile,
   JSON,
+
+  Enum,
+  SupabaseRow,
 }
 
 dynamic deserializeParam<T>(
@@ -162,8 +174,8 @@ dynamic deserializeParam<T>(
         return null;
       }
       return paramValues
-          .whereType<String>()
-          .map((p) => p)
+          .where((p) => p is String)
+          .map((p) => p as String)
           .map((p) => deserializeParam<T>(p, paramType, false))
           .where((p) => p != null)
           .map((p) => p! as T)
@@ -195,6 +207,38 @@ dynamic deserializeParam<T>(
         return uploadedFileFromString(param);
       case ParamType.JSON:
         return json.decode(param);
+
+      case ParamType.SupabaseRow:
+        final data = json.decode(param) as Map<String, dynamic>;
+        switch (T) {
+          case SupplierVisitSummaryRow:
+            return SupplierVisitSummaryRow(data);
+          case FaqRow:
+            return FaqRow(data);
+          case CustomerUsersRow:
+            return CustomerUsersRow(data);
+          case CompanyVisitSummaryRow:
+            return CompanyVisitSummaryRow(data);
+          case VisitingGroupRow:
+            return VisitingGroupRow(data);
+          case ChinalinkerUsersRow:
+            return ChinalinkerUsersRow(data);
+          case ClienteWishlistRow:
+            return ClienteWishlistRow(data);
+          case CompanyRow:
+            return CompanyRow(data);
+          case SupplierDetailsRow:
+            return SupplierDetailsRow(data);
+          case UsersRow:
+            return UsersRow(data);
+          case SupplierRow:
+            return SupplierRow(data);
+          default:
+            return null;
+        }
+
+      case ParamType.Enum:
+        return deserializeEnum<T>(param);
 
       default:
         return null;
